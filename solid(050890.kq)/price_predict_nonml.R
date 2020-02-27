@@ -23,34 +23,118 @@ options(scipen = 10)
 
 
 
-# get values
+# get price
 
-solid = bind_rows(list.files("d:/solid", pattern = "*.csv", full.names = T) %>% 
+solid = bind_rows(list.files("solid(050890.kq)/solid_data", pattern = "*.csv", full.names = T) %>% 
                     purrr::map_df(~fread(., encoding = "UTF-8"))) %>% 
-  setNames(c("date", "close", "compare", "volumn", "trading", "start", "high", "low", "cap", "stocks")) %>% 
-  mutate(date = ymd(date),
-         close = str_replace_all(close, ",", "") %>% as.numeric(),
-         volumn = str_replace_all(volumn, ",", "") %>% as.numeric(),
-         trading = str_replace_all(trading, ",", "") %>% as.numeric(),
-         start = str_replace_all(start, ",", "") %>% as.numeric(),
-         high = str_replace_all(high, ",", "") %>% as.numeric(),
-         low = str_replace_all(low, ",", "") %>% as.numeric(),
-         cap = str_replace_all(cap, ",", "") %>% as.numeric(),
-         stocks = str_replace_all(stocks, ",", "") %>% as.numeric()) %>% 
-  arrange(date)
+  setNames(c("Date", "Close", "Compare", "Volume", "Trading", "Open", "High", "Low", "Cap", "Stocks")) %>% 
+  mutate(Date = ymd(Date),
+         Close = str_replace_all(Close, ",", "") %>% as.numeric(),
+         Volume = str_replace_all(Volume, ",", "") %>% as.numeric(),
+         Trading = str_replace_all(Trading, ",", "") %>% as.numeric(),
+         Open = str_replace_all(Open, ",", "") %>% as.numeric(),
+         High = str_replace_all(High, ",", "") %>% as.numeric(),
+         Low = str_replace_all(Low, ",", "") %>% as.numeric(),
+         Cap = str_replace_all(Cap, ",", "") %>% as.numeric(),
+         Stocks = str_replace_all(Stocks, ",", "") %>% as.numeric()) %>% 
+  arrange(Date)
+
+
+# as xts
+
+solid_xts = solid %>% select(Date, Open, High, Low, Close, Volume) %>% 
+  tibble::column_to_rownames("Date") %>% 
+  as.matrix()
 
 
 
 
 # candle chart
 
-candleChart(solid)
+solid_xts %>% barChart()
+addMACD()
+addBBands()
+
+
+# plotly candle chart
+
+# create bollinger bands
+solid_full = solid %>% select(Date, Open, High, Low, Close, Volume) %>% 
+  bind_cols(
+    solid %>% select(Date, High, Low, Close) %>% 
+      tibble::column_to_rownames("Date") %>% setNames(c("High", "Low", "Close")) %>% 
+      as.matrix() %>% BBands() %>% as.data.frame() %>% select(1:3)
+  ) %>% filter(!is.na(up)) %>% 
+  mutate(direction = ifelse(Close >= Open, "Increasing", "Decreasing"))
+
+# candle chart with bband
+solid_full %>% plot_ly(x = ~ Date,
+                       type = "candlestick",
+                       open = ~ Open,
+                       close = ~ Close,
+                       high = ~ High,
+                       low = ~ Low) %>% 
+  add_lines(x = ~ Date, y = ~ up , name = "B Bands",
+            line = list(color = '#ccc', width = 0.5),
+            legendgroup = "Bollinger Bands",
+            hoverinfo = "none", inherit = F) %>% 
+  add_lines(x = ~ Date, y = ~ dn, name = "B Bands",
+            line = list(color = '#ccc', width = 0.5),
+            legendgroup = "Bollinger Bands", inherit = F,
+            showlegend = FALSE, hoverinfo = "none") %>% 
+  add_lines(x = ~ Date, y = ~ mavg, name = "Mv Avg",
+            line = list(color = '#E377C2', width = 0.5),
+            hoverinfo = "none", inherit = F) %>% 
+  layout(yaxis = list(title = "Price")) -> candlechart
+
+# add volume bar chart
+solid_full %>% 
+  plot_ly(x = ~ Date,
+          y = ~ Volume,
+          type = "bar",
+          name = "Volume",
+          color = ~ direction,
+          colors = c("#17BECF", "#7F7F7F")) %>%
+  layout(yaxis = list(title = "Volume")) -> volumechart
+
+# create rangeselector buttons
+range_selector = list(visible = T, x = 0.5, y = -0.055,
+                      xanchor = "center", yref = "paper",
+                      font = list(size = 9),
+                      buttons = list(
+                        list(count = 1,
+                             label = "Reset",
+                             step = "all"),
+                        list(count = 1,
+                             label = "1 Year",
+                             step = "year",
+                             stepmode = "backward"),
+                        list(count = 3,
+                             label = "3 Month",
+                             step = "month",
+                             stepmode = "backward"),
+                        list(count = 1,
+                             label = "1 Month",
+                             step = "month",
+                             stepmode = "backward")
+                      )
+)
+
+# subplot with shared x axis
+subplot(candlechart, volumechart, heights = c(0.7, 0.2), nrows = 2,
+        shareX = T, titleY = T) %>% 
+  layout(title = str_c("Solid(050890.kq) Chart 2015-01-29 ~ ", Sys.Date()),
+         xaxis = list(rangeselector = range_selector),
+         legend = list(orientation = "h", x = 0.5, y = 1,
+                       xanchor = "center", yref = "paper",
+                       font = list(size = 10),
+                       bgcolor = "transparent"))
 
 
 # close graphic 
 
-solid %>% plot_ly(x = ~ date,
-                  y = ~ close,
+solid %>% plot_ly(x = ~ Date,
+                  y = ~ Close,
                   mode = "lines")
 
 
@@ -60,15 +144,15 @@ solid %>% plot_ly(x = ~ date,
 # arima
 # log
 # check
-solid$close %>% log() %>% auto.arima() %>% summary()
-solid$close %>% log() %>% adf.test()
-solid$close %>% log() %>% auto.arima() %>% ggtsdiag()
-solid$close %>% log() %>% auto.arima() %>% checkresiduals()
+solid$Close %>% log() %>% auto.arima() %>% summary()
+solid$Close %>% log() %>% adf.test()
+solid$Close %>% log() %>% auto.arima() %>% ggtsdiag()
+solid$Close %>% log() %>% auto.arima() %>% checkresiduals()
 
 
 # diff
 # check
-model_arima = solid$close %>% auto.arima()
+model_arima = solid$Close %>% auto.arima()
 summary(model_arima)
 # autocorrelation
 model$residuals %>% adf.test()
@@ -83,7 +167,7 @@ fore = model_arima %>% forecast(20)
 
 plot_ly() %>% 
   add_lines(x = c(1:((solid %>% dim())[1])),
-            y = solid$close,
+            y = solid$Close,
             name = "observed") %>% 
   add_ribbons(x = c((((solid %>% dim())[1]) + 1) : (((solid %>% dim())[1]) + 20)),
               ymin = fore$lower[, 2],
@@ -105,17 +189,18 @@ plot_ly() %>%
 
 # arch model
 
-model_dynlm = dynlm(solid$close ~ 1)
+model_dynlm = dynlm(solid$Close ~ 1)
 summary(model_dynlm)
 
 e_sq = model_dynlm$residuals^2 %>% ts()
 model_arch = dynlm(ehatsq ~ L(e_sq))
 summary(model_arch)
 
+# arch effect
 ArchTest(solid$close ,lags = 1, demean = T)
 
 # same as arch when c(0, 1)
-model_garch = solid$close %>% ts() %>% garch(c(0, 1))
+model_garch = solid$Close %>% ts() %>% garch(c(0, 1))
 
 summary(model_garch)
 
@@ -132,7 +217,7 @@ model_sgarch = ugarchspec(variance.model = list(model = "sGARCH",
                           distribution.model = "std")
 # fit
 model_sgarch_fit = ugarchfit(spec = model_sgarch, 
-                             data = solid$close %>% ts())
+                             data = solid$Close %>% ts())
 
 # check
 coef(model_sgarch_fit)
@@ -145,7 +230,7 @@ model_sgarch_fit %>% ugarchforecast(n.ahead = 20)
 # graph
 plot_ly() %>% 
   add_lines(x = c(1:((solid %>% dim())[1])),
-            y = solid$close,
+            y = solid$Close,
             name = "observed") %>% 
   add_lines(x = c((((solid %>% dim())[1]) + 1) : (((solid %>% dim())[1]) + 20)),
             y = (model_sgarch_fit %>% ugarchforecast(n.ahead = 20))@forecast$seriesFor,
@@ -176,7 +261,7 @@ model_fgarch_fit %>% ugarchforecast(n.ahead = 20)
 # graph
 plot_ly() %>% 
   add_lines(x = c(1:((solid %>% dim())[1])),
-            y = solid$close,
+            y = solid$Close,
             name = "observed") %>% 
   add_lines(x = c((((solid %>% dim())[1]) + 1) : (((solid %>% dim())[1]) + 20)),
             y = (model_fgarch_fit %>% ugarchforecast(n.ahead = 20))@forecast$seriesFor,
@@ -196,7 +281,7 @@ model_fgarch = ugarchspec(variance.model = list(model = "fGARCH",
                           distribution.model = "std"
                           )
 model_fgarch_fit = ugarchfit(spec = model_fgarch, 
-                             data = solid$close %>% ts())
+                             data = solid$Close %>% ts())
 
 # check
 coef(model_fgarch_fit)
