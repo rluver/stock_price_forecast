@@ -2,11 +2,8 @@ require("data.table")
 require("stringr")
 require("lubridate")
 require("dplyr")
-require("ggplot2")
-require("ggfortify")
 require("plotly")
 require("keras")
-require("caret")
 
 
 
@@ -44,8 +41,7 @@ solid_scaled = solid %>% select(Date, Open, High, Low, Close, Volume) %>%
 
 
 # ml
-
-# nnar
+## nnar
 model_nnar = nnetar(solid$Close)
 model_nnar_fit = model_nnar %>% forecast(h = 20, PI= T)
 
@@ -70,13 +66,12 @@ plot_ly() %>%
 
 
 
-# keras
-
-# data split for train, test and set var
-batch_size = 25
+## keras
+#### data split for train, test and set var
+batch_size = 50
 time_lag = 5
 
-# train
+#### train
 x_train = solid_scaled %>% slice(seq(900 + time_lag)) %>% 
   tibble::column_to_rownames("Date") %>% 
   mutate(Open = lag(Open, time_lag),
@@ -94,7 +89,7 @@ y_train = solid_scaled %>% select(Close) %>%
   as.matrix() %>% 
   array(dim = c(900, 1))
 
-# test
+#### test
 x_test = solid_scaled %>% slice(seq(885 + time_lag + 1, nrow(solid))) %>% 
   tibble::column_to_rownames("Date") %>% 
   mutate(Open = lag(Open, time_lag),
@@ -116,7 +111,7 @@ y_test = solid_scaled %>% select(Close) %>%
 
 
 
-# lstm
+### lstm
 model_lstm = keras_model_sequential() %>% 
   layer_lstm(units = 100,
              input_shape = c(time_lag, 5),
@@ -132,7 +127,7 @@ model_lstm = keras_model_sequential() %>%
   compile(loss = 'mae', 
           optimizer = 'Nadam')
 
-# train
+#### train
 for(i in 1:1000){
   model_lstm %>% 
     fit(x = x_train,
@@ -147,11 +142,11 @@ for(i in 1:1000){
 
 
 
-# GRU
+### gru
 model_gru = keras_model_sequential() %>% 
   layer_gru(units = 100, 
             input_shape = c(time_lag, 5),
-            batch_size = batch.size,
+            batch_size = batch_size,
             return_sequences = T,
             stateful = T) %>% 
   layer_dropout(0.5) %>% 
@@ -164,7 +159,7 @@ model_gru = keras_model_sequential() %>%
           optimizer = "Nadam")
 
 
-# train
+#### train
 for(i in 1:1000){
   model_gru %>% 
     fit(x = x_train,
@@ -179,18 +174,32 @@ for(i in 1:1000){
 
 
 
-# compare
-summ = solid %>% summary()
-data.
+### compare
+#### create result table
+result_table = solid %>% 
+  select(Date) %>% 
+  tail(350) %>% 
+  bind_cols(data_frame(real = y_test,
+                       predict_lstm = model_lstm %>% predict(x_test, batch_size = batch_size) %>% as.numeric(),
+                       predict_gru = model_gru %>% predict(x_test, batch_size = batch_size) %>% as.numeric()) %>% 
+              mutate(real = real*(max(solid$Close) - min(solid$Close)) + min(solid$Close),
+              predict_lstm = predict_lstm*(max(solid$Close) - min(solid$Close)) + min(solid$Close),
+              predict_gru = predict_gru*(max(solid$Close) - min(solid$Close)) + min(solid$Close))
+  )
 
-solid %>% 
-  plot_ly() %>% 
-  add_lines(x = ~ Date,
-            y = ~ Close,
-            name = "Actual") %>% 
-  add_lines(x = c(282:1262),
-            y = model_nn %>% predict(solid %>% slice(282:1262) %>% select(2, 4, 6, 7 ,8) %>% as.matrix()),
-            name = "predict")
-
-model_lstm %>% predict(x_test)
-
+#### visualization
+result_table %>%
+  plot_ly(x = ~ Date) %>% 
+  add_lines(y = ~ real,
+            name = "Actual",
+            mode = "lines",
+            line = list(width = 1.5)) %>% 
+  add_lines(y = ~ predict_lstm,
+            name = "LSTM",
+            mode = "lines",
+            line = list(width = 0.7)) %>% 
+  add_lines(y = ~ predict_gru,
+            name = "GRU",
+            mode = "lines",
+            line = list(width = 0.7)) %>% 
+  layout(yaxis = list(title = "Price"))
