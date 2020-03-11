@@ -58,3 +58,37 @@ for(i in 1:10){
     )
   
 }
+
+
+
+
+### lstm model using sentiment
+stock_data_input = layer_input(batch_shape = c(batch_size, time_lag, 100),
+                               name = 'stock_data_input') %>% 
+  layer_lstm(units = 100,
+             batch_size = batch_size,
+             return_sequences = T,
+             stateful = T,
+             name = 'lstm_layer') %>% 
+  layer_dropout(rate = 0.5) %>%
+  layer_lstm(units = 50,
+             return_sequences = F,
+             stateful = T,
+             name = 'stock_data_process') %>%
+  layer_dropout(rate = 0.5)
+
+lstm_output = stock_data_input %>% 
+  layer_dense(units = 1,
+              name = 'lstm_output')
+  
+sentiment_input = layer_input(batch_shape = c(50, 1), 
+                              name = 'sentiment_input')
+
+bind_layer = layer_concatenate(inputs = c(lstm_output, sentiment_input),
+                               name = 'bind_layer')
+   
+
+model_lstm_sentiment = keras_model(inputs = c(stock_data_input, sentiment_input),
+                                   outputs = c(lstm_output, final_output)) %>% 
+  compile(loss = 'mae', 
+          optimizer = 'Nadam')
