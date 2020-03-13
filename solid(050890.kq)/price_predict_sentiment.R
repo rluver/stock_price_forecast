@@ -70,6 +70,12 @@ for(i in 1:10){
 }
 
 
+## tokenizer
+tokenizer = text_tokenizer(num_words = 10000) %>% fit_text_tokenizer(news$text)
+sequences = tokenizer %>% texts_to_sequences(news$text)
+tfidf = tokenizer %>% texts_to_matrix(news$text, mode = 'tfidf')
+
+
 
 
 ### lstm model using sentiment
