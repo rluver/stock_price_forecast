@@ -84,15 +84,15 @@ stock_data_input = layer_input(batch_shape = c(batch_size, time_lag, 100),
 lstm_model = stock_data_input %>% 
   layer_lstm(units = 100,
              batch_size = batch_size,
+             recurrent_dropout = 0.5,
              return_sequences = T,
              stateful = T,
              name = 'lstm_layer') %>% 
-  layer_dropout(rate = 0.5) %>%
   layer_lstm(units = 50,
+             recurrent_dropout = 0.5,
              return_sequences = F,
              stateful = T,
              name = 'stock_data_process') %>%
-  layer_dropout(rate = 0.5) %>% 
   layer_dense(units = 1,
               name = 'lstm_output')
 
