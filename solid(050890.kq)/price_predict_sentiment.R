@@ -10,7 +10,7 @@ require('keras')
 
 
 # define user function
-
+# get data from api
 get_data = function(i){
   start = str_c('&start=', 100*(i - 1) + 1)
   
@@ -21,6 +21,7 @@ get_data = function(i){
     return()
 }
 
+# extract index using keyword
 get_index = function(data){
   data %>% 
     xpathSApply(., '/rss/channel/item/title', xmlValue) %>% 
@@ -40,6 +41,12 @@ display = '&display=100'
 sort = '&sort=date'
 news = data.table()
 
+# stopword
+korean_stopword = 'https://www.ranks.nl/stopwords/korean' %>% read_html() %>% 
+  html_node('.panel-body tbody') %>% 
+  str_extract_all('([가-힣]+)') %>% unlist() %>% str_flatten(collapse = '|')
+
+
 
 ## get data
 for(i in 1:10){
@@ -50,13 +57,16 @@ for(i in 1:10){
                      dmy())[get_data(i) %>% get_index()],
                    title = (get_data(i) %>% 
                      xpathSApply(., '/rss/channel/item/title', xmlValue))[get_data(i) %>% get_index()] %>% 
-                     str_replace_all('</?b>', ' ') %>% 
-                     str_replace_all('^[:space:]{1}', '') %>% 
-                     str_replace_all('[(?:쏠리드) (?:,)]', ''),
+                     str_replace_all('[</?b>|&quot;?|·]', ' ') %>% 
+                     str_replace_all('[\\b|●▲]+', '') %>% 
+                     str_replace_all('^[korean_stopword]$', ''),
                    text = (get_data(i) %>% 
-                     xpathSApply(., '/rss/channel/item/description', xmlValue))[get_data(i) %>% get_index()])
-    )
-  
+                     xpathSApply(., '/rss/channel/item/description', xmlValue))[get_data(i) %>% get_index()]) %>% 
+                     str_replace_all('[</?b>|&quot;?|·]', ' ') %>% 
+                     str_replace_all('[\\b|●▲]+', '') %>% 
+                     str_replace_all('^[korean_stopword]$', '')
+                  )
+    )  
 }
 
 
